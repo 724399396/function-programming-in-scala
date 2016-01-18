@@ -50,19 +50,80 @@ object List { // `List` companion object. Contains functions for creating and wo
     foldRight(ns, 1.0)(_ * _) // `_ * _` is more concise notation for `(x,y) => x * y`; see sidebar
 
 
-  def tail[A](l: List[A]): List[A] = sys.error("todo")
+  def tail[A](l: List[A]): List[A] = l match {
+    case Cons(x,xs) => xs
+    case _ => throw new NoSuchElementException
+  }
 
-  def setHead[A](l: List[A], h: A): List[A] = sys.error("todo")
+  def setHead[A](l: List[A], h: A): List[A] = l match {
+    case Cons(x,xs) => Cons(h,xs)
+  }
 
-  def drop[A](l: List[A], n: Int): List[A] = sys.error("todo")
+  def drop[A](l: List[A], n: Int): List[A] =
+    if (n <= 0) l
+    else drop(tail(l), n-1)
 
-  def dropWhile[A](l: List[A], f: A => Boolean): List[A] = sys.error("todo")
+  def dropWhile[A](l: List[A], f: A => Boolean): List[A] = l match {
+    case Cons(x,xs) if (f(x)) => dropWhile(xs, f)
+    case _ => l
+  }
 
-  def init[A](l: List[A]): List[A] = sys.error("todo")
+  def init[A](l: List[A]): List[A] = l match {
+    case Cons(_,Nil) => Nil
+    case Cons(x,xs) => Cons(x, init(l))
+  }
 
-  def length[A](l: List[A]): Int = sys.error("todo")
+  def length[A](l: List[A]): Int =
+    foldRight(l, 0)((_,acc) => acc + 1)
 
-  def foldLeft[A,B](l: List[A], z: B)(f: (B, A) => B): B = sys.error("todo")
+  def foldLeft[A,B](l: List[A], z: B)(f: (B, A) => B): B = l match {
+    case Nil => z
+    case Cons(x,xs) => foldLeft(xs, f(z,x))(f)
+  }
 
-  def map[A,B](l: List[A])(f: A => B): List[B] = sys.error("todo")
+  def sum3(l: List[Int]) = foldLeft(l,0)(_ + _)
+
+  def product3(l: List[Int]) = foldLeft(l, 1)(_ * _)
+
+  def reverse[A](l: List[A]) = foldLeft(l, Nil[A])((acc,x) => Cons(x,acc))
+
+  def foldLeftViaFoldRight[A,B](l: List[A], z: B)(f: (B,A) => B) =
+    foldRight(l, (b: B) => b)((a,g) => b => g(f(b,a)))
+
+  def foldRightViaFoldLeft[A,B](l: List[A], z: B)(f: (A,B) => B) =
+    foldLeft(reverse(l), z)((b,a) => f(a,b))
+
+  def foldRightViaFoldLeft2[A,B](l: List[A], z: B)(f: (A,B) => B) =
+    foldLeft(l, (b: B) => b)((g,a) => b => g(f(a,b)))
+
+  def appendViaFoldRight[A](l1: List[A], l2: List[A]): List[A] =
+    foldRight(l1, l2)((x,acc) => Cons(x,acc))
+
+  def concat[A](lists: List[List[A]]): List[A] =
+    foldLeft(lists, Nil[A])(appendViaFoldRight)
+
+  def add1(list: List[Int]) =
+    foldRight(list, Nil[Int])((x,acc) => Cons(x + 1, acc))
+
+  def doubleToString(l: List[Double]): List[String] =
+    foldRight(l,Nil[String])((x,acc) => Cons(x.toString, acc))
+
+  def map[A,B](l: List[A])(f: A => B): List[B] =
+    foldRight(l,Nil[A])((x,acc) => Cons(f(x),acc))
+
+  def flatMap[A,B](l: List[A])(f: A => List[B]): List[B] =
+    concat(map(l)(f))
+
+  def filterViaFlatMap[A](l: List[A])(pre: A => Boolean): List[A] =
+    flatMap(l)(a => if (pre(a)) List(a) else Nil)
+
+  def zipWith[A,B,C](l1: List[A], l2: List[B])(f: (A,B)=> C): List[C] = (l1,l2) match {
+    case (_,Nil) => Nil
+    case (Nil, _) => Nil
+    case (Cons(x,xs), Cons(y,ys)) => Cons(f(x,y),zipWith(xs,ys)(f))
+  }
+
+  def hasSubsequence[A](l: List[A], sub: List[A]): Boolean =
+
+
 }
