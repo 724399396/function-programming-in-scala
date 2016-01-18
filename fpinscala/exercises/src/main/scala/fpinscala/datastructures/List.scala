@@ -1,5 +1,7 @@
 package fpinscala.datastructures
 
+import sun.font.TrueTypeFont
+
 sealed trait List[+A] // `List` data type, parameterized on a type, `A`
 case object Nil extends List[Nothing] // A `List` data constructor representing the empty list
 /* Another data constructor, representing nonempty lists. Note that `tail` is another `List[A]`,
@@ -123,7 +125,18 @@ object List { // `List` companion object. Contains functions for creating and wo
     case (Cons(x,xs), Cons(y,ys)) => Cons(f(x,y),zipWith(xs,ys)(f))
   }
 
-  def hasSubsequence[A](l: List[A], sub: List[A]): Boolean =
+  @annotation.tailrec
+  def startsWith[A](l: List[A], sub: List[A]): Boolean = (l,sub) match {
+    case (_, Nil) => true
+    case (Cons(x,xs),Cons(y,ys)) if (x == y) => startsWith(xs,ys)
+    case (Nil,_) => false
+  }
+
+  def hasSubsequence[A](l: List[A], sub: List[A]): Boolean = l match {
+    case Nil => sub == Nil
+    case _ if startsWith(l, sub) => true
+    case Cons(x,xs) => hasSubsequence(xs,sub)
+  }
 
 
 }
