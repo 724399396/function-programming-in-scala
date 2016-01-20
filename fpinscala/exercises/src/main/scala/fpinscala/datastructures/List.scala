@@ -152,9 +152,9 @@ object List { // `List` companion object. Contains functions for creating and wo
     case _ => false
   }
 
-  def hasSubsequence[A](l: List[A], sub: List[A]): Boolean = l match {
+  def hasSubSequence[A](l: List[A], sub: List[A]): Boolean = l match {
     case Nil => sub == Nil
     case _ if startsWith(l, sub) => true
-    case Cons(h, t) => hasSubsequence(t, sub)
-
+    case Cons(h, t) => hasSubSequence(t, sub)
+  }
 }
