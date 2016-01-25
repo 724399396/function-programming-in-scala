@@ -1,6 +1,8 @@
 package fpinscala.errorhandling
 
 
+import java.util.regex.Pattern
+
 import scala.{Option => _, Some => _, Either => _, _} // hide std library `Option`, `Some` and `Either`, since we are writing our own in this chapter
 
 sealed trait Option[+A] {
@@ -57,9 +59,32 @@ object Option {
     mean(xs) flatMap(m => mean(xs.map(x => math.pow(x - m, 2))))
   }
 
-  def map2[A,B,C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] = sys.error("todo")
+  def map2[A,B,C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] =
+    a flatMap(x => b map (y => f(x,y)))
 
-  def sequence[A](a: List[Option[A]]): Option[List[A]] = sys.error("todo")
+  def pattern(s: String): Option[Pattern] = {
+    try {
+      Some(Pattern.compile(s))
+    } catch {
+      case e: Exception => None
+    }
+  }
 
-  def traverse[A, B](a: List[A])(f: A => Option[B]): Option[List[B]] = sys.error("todo")
+  def mkMatcher(pat: String): Option[String => Boolean] =
+    pattern(pat) map (p => (s: String) => p.matcher(s).matches )
+
+  def bothMatch_2(pat1: String, pat2: String, s: String): Option[Boolean] =
+    map2(mkMatcher(pat1), mkMatcher(pat2))((a,b) => a(s) && b(s))
+
+  def sequence[A](a: List[Option[A]]): Option[List[A]] =
+    a.foldRight[Option[List[A]]](Some(Nil))((x,y) => map2(x,y)(_ :: _))
+
+  def traverse[A, B](a: List[A])(f: A => Option[B]): Option[List[B]] =
+    a match {
+      case Nil => None
+      case h :: tl => map2(f(h),traverse(tl)(f))(_ :: _)
+    }
+
+  def sequenceViaTraverse[A](a: List[Option[A]]): Option[List[A]] =
+    traverse(a)(x => x)
 }
