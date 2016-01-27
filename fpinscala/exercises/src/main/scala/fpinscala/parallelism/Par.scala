@@ -9,7 +9,9 @@ object Par {
   def run[A](s: ExecutorService)(a: Par[A]): Future[A] = a(s)
 
   def unit[A](a: A): Par[A] = (es: ExecutorService) => UnitFuture(a) // `unit` is represented as a function that returns a `UnitFuture`, which is a simple implementation of `Future` that just wraps a constant value. It doesn't use the `ExecutorService` at all. It's always done and can't be cancelled. Its `get` method simply returns the value that we gave it.
-  
+
+  def async[A](a: A): Par[A] = fork(unit(a))
+
   private case class UnitFuture[A](get: A) extends Future[A] {
     def isDone = true 
     def get(timeout: Long, units: TimeUnit) = get 
@@ -29,10 +31,37 @@ object Par {
       def call = a(es).get
     })
 
+  def lazyUnit[A](a: A): Par[A] = fork(unit(a))
+
+  def asyncF[A,B](f: A => B): A => Par[B] =
+    (a: A) => lazyUnit(f(a))
+
   def map[A,B](pa: Par[A])(f: A => B): Par[B] = 
     map2(pa, unit(()))((a,_) => f(a))
 
   def sortPar(parList: Par[List[Int]]) = map(parList)(_.sorted)
+
+  def product[A,B](fa: Par[A], fb: Par[B]): Par[(A,B)] =
+    (es: ExecutorService) => {
+      val af = fa(es)
+      val bf = fb(es)
+      UnitFuture((af.get,bf.get))
+    }
+
+  def map_1[A,B](fa: Par[A])(f: A => B): Par[B] =
+    (es:ExecutorService) => {
+      val af = fa(es)
+      UnitFuture(f(af.get))
+    }
+
+  def parMap[A,B](l: List[A])(f: A => B): Par[List[B]] =
+    l.foldRight(unit[List[B]](Nil))((x,acc) => map2(unit(f(x)),acc)(_ :: _))
+
+  def sequence[A](l: List[Par[A]]): Par[List[A]] =
+    l.foldRight(unit[List[A]](Nil))(map2(_,_)(_ :: _))
+
+  def parFilter[A](l: List[A])(f: A => Boolean): Par[List[A]] =
+    map(sequence(l.map(x => if (f(x)) async(List(x)) else async(List()))))(_.flatten)
 
   def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean = 
     p(e).get == p2(e).get
