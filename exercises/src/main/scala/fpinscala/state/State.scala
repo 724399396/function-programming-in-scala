@@ -128,6 +128,12 @@ case class State[S,+A](run: S => (A, S)) {
         f(v).run((s2))
       }
     )
+
+  def get: State[S, S] =
+    State((s: S) => (s,s))
+
+  def set(s: S): State[S, Unit] =
+    State(_ => ((), s))
 }
 
 sealed trait Input
@@ -143,5 +149,21 @@ object State {
     State(s => (a, s))
 
 
-  def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = ???
+  def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] =
+    def help(input: Input): State[Machine, Unit] = {
+      (machine: Matchine) => ((), (input, machine) match {
+        case (_, Machine(_, 0, _) @ m) =>
+          ((), m)
+        case (Coin, Machine(true, candies, coins)) if candies > 0 =>
+          ((), Machine(false, candies, coins + 1))
+        case (Coin, Machine(locked, candies, coins)) =>
+          ((), Machine(locked, candies, coins + 1))
+        case (Turn, Machine(false, candies, coins)) =>
+          ((), Machine(true, candies-1, conins))
+        case (Turn, Machine(true, _, _) @ m) =>
+          ((),m)
+      }
+    }
+
+
 }
