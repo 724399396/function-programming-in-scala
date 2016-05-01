@@ -29,10 +29,43 @@ object Par {
       def call = a(es).get
     })
 
+  def asyncF[A,B](f: A => B): A => Par[B] =
+    (a: A) => fork(unit(f(a)))
+
   def map[A,B](pa: Par[A])(f: A => B): Par[B] = 
     map2(pa, unit(()))((a,_) => f(a))
 
   def sortPar(parList: Par[List[Int]]) = map(parList)(_.sorted)
+
+  def product[A,B](fa: Par[A], fb: Par[B]): Par[(A,B)] =
+    (es: ExecutorService) => {
+      val af = fa(es)
+      val bf = fb(es)
+      UnitFuture(af.get,bf.get)
+    }
+
+  def mapAsPrimitive[A,B](a: Par[A])(f: A => B): Par[B] =
+    (es: ExecutorService) => {
+      val af = a(es)
+      UnitFuture(f(af.get))
+    }
+
+  def map2AsCombine[A,B,C](a: Par[A], b: Par[B])(f: (A,B) => C): Par[C] = {
+    mapAsPrimitive(product(a,b)){ x: (A,B) => f(x._1,x._2)}
+  }
+
+  def parMap[A,B](l: List[A])(f: A => B): Par[List[B]] =
+    es => {
+      UnitFuture(l.map(f))
+    }
+
+  def sequence[A](l: List[Par[A]]): Par[List[A]] =
+    l.foldRight(unit(List[A]()))((x, acc) => map2(x, acc)(_ :: _))
+
+  def parFilter[A](l: List[A])(f: A => Boolean): Par[List[A]] = {
+    val pars: List[Par[List[A]]] = l.map(asyncF((a: A) => if (f(a)) List(a) else List()))
+    map(sequence(pars))(_.flatten)
+  }
 
   def equal[A](e: ExecutorService)(p: Par[A], p2: Par[A]): Boolean = 
     p(e).get == p2(e).get
