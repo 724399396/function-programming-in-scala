@@ -100,7 +100,7 @@ object Par {
   def join[A](a: Par[Par[A]]): Par[A] =
     es => run(es)(run(es)(a).get())
 
-  def flatMapViaJoin[A,B](a: Par[A])(f: A => Par[B]): Par[B] =
+  def flatMap[A,B](a: Par[A])(f: A => Par[B]): Par[B] =
     join(map(a)(f))
 
   /* Gives us infix syntax for `Par`. */
