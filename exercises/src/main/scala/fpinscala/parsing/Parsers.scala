@@ -10,6 +10,8 @@ trait Parsers[Parser[+_]] { self => // so inner classes may call methods of trai
   ParserOps[String] = ParserOps(f(a))
   implicit def regex(r: Regex): Parser[String]
 
+  def run[A](p: Parser[A])(input: String): Either[ParseError, A]
+
   def or[A](s1: Parser[A], s2: => Parser[A]): Parser[A]
 
   def many[A](p: Parser[A]): Parser[List[A]] =
@@ -52,6 +54,12 @@ trait Parsers[Parser[+_]] { self => // so inner classes may call methods of trai
 
   def mapViaFlatMap[A,B](p: Parser[A])(f: A => B): Parser[B] =
     flatMap(p)(x => succeed(f(x)))
+
+  def label[A](msg: String)(p: Parser[A]): Parser[A]
+
+  def scope[A](msg: String)(p: Parser[A]): Parser[A]
+
+  def attempt[A](p: Parser[A]): Parser[A]
 
   case class ParserOps[A](p: Parser[A]) {
     def |[B>:A](p2: Parser[B]): Parser[B] = self.or(p,p2)
