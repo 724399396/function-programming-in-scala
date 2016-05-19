@@ -44,9 +44,19 @@ trait Applicative[F[_]] extends Functor[F] {
     }
   }
 
-  def compose[G[_]](G: Applicative[G]): Applicative[({type f[x] = F[G[x]]})#f] = ???
+  def compose[G[_]](G: Applicative[G]): Applicative[({type f[x] = F[G[x]]})#f] = {
+    val self = this
+    new Applicative[({type f[x] = F[G[x]]})#f] {
+      override def unit[A](a: => A): F[G[A]] =
+        self.unit(G.unit(a))
+      override def map2[A,B,C](fga: F[G[A]], fgb: F[G[B]])(f: (A,B) => C): F[G[C]] =
+        self.map2(fga, fgb)((ga, gb) => G.map2(ga, gb)(f))
+    }
+  }
 
-  def sequenceMap[K,V](ofa: Map[K,F[V]]): F[Map[K,V]] = ???
+  def sequenceMap[K,V](ofa: Map[K,F[V]]): F[Map[K,V]] =
+    ofa.foldLeft(unit(Map[K,V]())){case (acc, (k, fv)) =>
+        map2(acc, fv)((ac,v) => ac + (k -> v))}
 }
 
 case class Tree[+A](head: A, tail: List[Tree[A]])
@@ -161,9 +171,11 @@ trait Traverse[F[_]] extends Functor[F] with Foldable[F] {
   def zipWithIndex[A](fa: F[A]): F[(A, Int)] =
     mapAccum(fa, 0)((a, s) => ((a, s), s + 1))._1
 
-  def reverse[A](fa: F[A]): F[A] = ???
+  def reverse[A](fa: F[A]): F[A] =
+    mapAccum(fa, toList(fa).reverse)((_,s) => (s.head, s.tail))._1
 
-  override def foldLeft[A,B](fa: F[A])(z: B)(f: (B, A) => B): B = ???
+  override def foldLeft[A,B](fa: F[A])(z: B)(f: (B, A) => B): B =
+    mapAccum(fa, z)((a, s) => ((), f(s,a)))._2
 
   def fuse[G[_],H[_],A,B](fa: F[A])(f: A => G[B], g: A => H[B])
                          (implicit G: Applicative[G], H: Applicative[H]): (G[F[B]], H[F[B]]) = ???
@@ -172,11 +184,23 @@ trait Traverse[F[_]] extends Functor[F] with Foldable[F] {
 }
 
 object Traverse {
-  val listTraverse = ???
+  val listTraverse = new Traverse[List] {
+    override def traverse[G[_],A,B](as: List[A])(f: A => G[B])(implicit G: Applicative[G]): G[List[B]] =
+      as.foldRight(G.unit(List[B]()))((a, fbs) => G.map2(f(a), fbs)(_ :: _))
+  }
 
-  val optionTraverse = ???
+  val optionTraverse = new Traverse[Option] {
+    override def traverse[G[_],A,B](as: Option[A])(f: A => G[B])(implicit G: Applicative[G]): G[Option[B]] =
+      as match {
+        case Some(x) => G.map(f(x))(Some(_))
+        case None => G.unit(None)
+      }
+  }
 
-  val treeTraverse = ???
+  val treeTraverse = new Traverse[Tree] {
+    override def traverse[G[_],A,B](as: Tree[A])(f: A => G[B])(implicit G: Applicative[G]): G[Tree[B]] =
+      G.map2(f(as.head), listTraverse.traverse(as.tail)(a => traverse(a)(f)))(Tree(_,_))
+  }
 }
 
 // The `get` and `set` functions on `State` are used above,
