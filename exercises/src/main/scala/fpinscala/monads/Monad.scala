@@ -62,17 +62,40 @@ object Monad {
       ma flatMap f
   }
 
-  val parMonad: Monad[Par] = ???
+  val parMonad: Monad[Par] = new Monad[Par] {
+    def unit[A](a: => A): Par[A] = Par.unit(a)
+    def flatMap[A,B](ma: Par[A])(f: A => Par[B]): Par[B] =
+      Par.flatMap(ma)(f)
+  }
 
-  def parserMonad[P[+_]](p: Parsers[P]): Monad[P] = ???
+  def parserMonad[P[+_]](p: Parsers[P]): Monad[P] = new Monad[P] {
+    def unit[A](a: => A): P[A] = p.succeed(a)
+    def flatMap[A,B](ma: P[A])(f: A => P[B]) =
+      p.flatMap(ma)(f)
+  }
 
-  val optionMonad: Monad[Option] = ???
+  val optionMonad: Monad[Option] = new Monad[Option] {
+    def unit[A](a: => A): Option[A] = Some(a)
+    def flatMap[A,B](ma: Option[A])(f: A => Option[B]) =
+      ma flatMap f
+  }
 
-  val streamMonad: Monad[Stream] = ???
+  val streamMonad: Monad[Stream] = new Monad[Stream] {
+    def unit[A](a: => A): Stream[A] = Stream(a)
+    def flatMap[A,B](ma: Stream[A])(f: A => Stream[B]) =
+      ma flatMap f
+  }
 
-  val listMonad: Monad[List] = ???
+  val listMonad: Monad[List] = new Monad[List] {
+    def unit[A](a: => A): List[A] = List(a)
 
-  def stateMonad[S] = ???
+    def flatMap[A, B](ma: List[A])(f: (A) => List[B]): List[B] = ma flatMap f
+  }
+
+  def stateMonad[S] = new Monad[({type f[x] = State[S, x]})#f] {
+    def unit[A](a: => A): State[S,A] = State.unit(a)
+    def flatMap[A,B](ma: State[S,A])(f: A => State[S,B]) = ma flatMap f
+  }
 
   val idMonad: Monad[Id] = ???
 
