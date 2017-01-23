@@ -2,6 +2,8 @@ package fpinscala.localeffects
 
 import fpinscala.monads._
 
+import scala.collection.mutable
+
 object Mutable {
   def quicksort(xs: List[Int]): List[Int] = if (xs.isEmpty) xs else {
     val arr = xs.toArray
@@ -98,7 +100,11 @@ sealed abstract class STArray[S,A](implicit manifest: Manifest[A]) {
   // Turn the array into an immutable list
   def freeze: ST[S,List[A]] = ST(value.toList)
 
-  def fill(xs: Map[Int,A]): ST[S,Unit] = ???
+  def fill(xs: Map[Int,A]): ST[S,Unit] =
+    xs.foldLeft(ST[S,Unit]()){
+      case (acc, (k,v)) =>
+        acc flatMap (_ => write(k, v))
+    }
 
   def swap(i: Int, j: Int): ST[S,Unit] = for {
     x <- read(i)
@@ -106,6 +112,7 @@ sealed abstract class STArray[S,A](implicit manifest: Manifest[A]) {
     _ <- write(i, y)
     _ <- write(j, x)
   } yield ()
+
 }
 
 object STArray {
@@ -119,6 +126,35 @@ object STArray {
     ST(new STArray[S,A] {
       lazy val value = xs.toArray
     })
+
+  def noop[S] = ST[S,Unit](())
+
+  def partition[S](arr: STArray[S,Int],
+                   l: Int, r: Int, pivot: Int): ST[S,Int] = for {
+    pivotVal <- arr.read(pivot)
+    _ <- arr.swap(pivot, r)
+    jr <- STRef(l)
+    _ <- (l until r).foldLeft(noop[S]){
+      (acc,i) =>
+        for {
+          x <- arr.read(i)
+          _ <- if (x < pivotVal)
+            (for {
+              j <- jr.read
+              _ <- arr.swap(i,j)
+              _ <- jr.write(j+1)
+            } yield ()) else noop[S]
+        } yield ()
+    }
+    j <- jr.read
+    _ <- arr.swap(j, r)
+  } yield j
+
+  def qs[S](a: STArray[S,Int], l: Int, r: Int): ST[S,Unit] = if (l < r) (for {
+    p <- partition(a, l, r, l + (r - l)/2)
+    _ <- qs(a, l, p-1)
+    _ <- qs(a, p+1, r)
+  } yield ()) else noop[S]
 }
 
 object Immutable {
@@ -141,3 +177,29 @@ object Immutable {
 
 import scala.collection.mutable.HashMap
 
+sealed trait STMap[S,K,V] {
+  protected def table: HashMap[K,V]
+
+  def size: ST[S,Int] =
+    ST(table.size)
+
+  def apply(k: K): ST[S,V] = ST(table(k))
+
+  def get(k: K): ST[S, Option[V]] = ST(table.get(k))
+
+  def +=(kv: (K,V)): ST[S, Unit] = ST(table += kv)
+
+  def -=(k: K): ST[S,Unit] = ST(table -= k)
+}
+
+object STMap {
+  def empty[S,K,V]: ST[S, STMap[S,K,V]] = ST(
+    new STMap[S,K,V] {
+      val table = HashMap.empty[K, V]
+    }
+  )
+
+  def fromMap[S,K,V](m: Map[K,V]): ST[S, STMap[S,K,V]] = ST(new STMap[S,K,V] {
+    val table = (HashMap.newBuilder[K,V] ++= m).result
+  })
+}

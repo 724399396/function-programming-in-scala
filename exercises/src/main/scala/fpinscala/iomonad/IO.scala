@@ -372,18 +372,40 @@ object IO3 {
                                f: A => Free[F, B]) extends Free[F, B]
 
   // Exercise 1: Implement the free monad
-  def freeMonad[F[_]]: Monad[({type f[a] = Free[F,a]})#f] = ???
+  def freeMonad[F[_]]: Monad[({type f[a] = Free[F,a]})#f] =
+    new Monad[({type f[a] = Free[F,a]})#f] {
+      def unit[A](a: => A): Free[F,A] = Return(a)
+      def flatMap[A,B](a: Free[F,A])(f: A => Free[F,B]): Free[F,B] =
+        a flatMap (f)
+    }
 
   // Exercise 2: Implement a specialized `Function0` interpreter.
-  // @annotation.tailrec
-  def runTrampoline[A](a: Free[Function0,A]): A = ???
+  @annotation.tailrec
+  def runTrampoline[A](a: Free[Function0,A]): A = a match {
+    case Return(a) => a
+    case Suspend(s) => s()
+    case FlatMap(s,f) => s match {
+      case Return(a) => runTrampoline(f(a))
+      case Suspend(s) => runTrampoline(f(s()))
+      case FlatMap(y,g) => runTrampoline(y flatMap(a => g(a) flatMap f))
+    }
+  }
 
   // Exercise 3: Implement a `Free` interpreter which works for any `Monad`
-  def run[F[_],A](a: Free[F,A])(implicit F: Monad[F]): F[A] = ???
+  def run[F[_],A](a: Free[F,A])(implicit F: Monad[F]): F[A] = a match {
+    case Return(a) => F.unit(a)
+    case Suspend(s) => s
+    case FlatMap(Suspend(s), f) => F.flatMap(s)(a => run(f(a)))
+    case _ => sys.error("Impossible, since `step` eliminates these cases")
+  }
 
   // return either a `Suspend`, a `Return`, or a right-associated `FlatMap`
-  // @annotation.tailrec
-  def step[F[_],A](a: Free[F,A]): Free[F,A] = ???
+  @annotation.tailrec
+  def step[F[_],A](a: Free[F,A]): Free[F,A] = a match {
+    case FlatMap(Return(a), y) => step(y(a))
+    case FlatMap(FlatMap(y,f), g) => step(y flatMap(a => f(a) flatMap g))
+    case _ => a
+  }
 
   /*
   The type constructor `F` lets us control the set of external requests our
@@ -490,9 +512,18 @@ object IO3 {
   // Exercise 4 (optional, hard): Implement `runConsole` using `runFree`,
   // without going through `Par`. Hint: define `translate` using `runFree`.
 
-  def translate[F[_],G[_],A](f: Free[F,A])(fg: F ~> G): Free[G,A] = ???
+  def translate[F[_],G[_],A](f: Free[F,A])(fg: F ~> G): Free[G,A] = {
+    type FreeG[A] = Free[G,A]
+    val t = new (F ~> FreeG) {
+      override def apply[A](f: F[A]): FreeG[A] = Suspend(fg(f))
+    }
+    runFree(f)(t)(freeMonad)
+  }
 
-  def runConsole[A](a: Free[Console,A]): A = ???
+  def runConsole[A](a: Free[Console,A]): A =
+    runTrampoline(translate(a)(new (Console ~> Function0) {
+      def apply[A](f: Console[A]): () => A = f.toThunk
+    }))
 
   /*
   There is nothing about `Free[Console,A]` that requires we interpret
@@ -572,7 +603,20 @@ object IO3 {
 
   def read(file: AsynchronousFileChannel,
            fromPosition: Long,
-           numBytes: Int): Par[Either[Throwable, Array[Byte]]] = ???
+           numBytes: Int): Par[Either[Throwable, Array[Byte]]] =
+    Par.async { (cb: Either[Throwable, Array[Byte]] => Unit) =>
+      val buffer = ByteBuffer.allocate(numBytes)
+      file.read(buffer, fromPosition, (), new CompletionHandler[Integer, Unit] {
+        override def completed(bytesRead: Integer, attachment: Unit): Unit = {
+          val arr = new Array[Byte](bytesRead)
+          buffer.slice().get(arr, 0, bytesRead)
+          cb(Right(arr))
+        }
+
+        override def failed(exc: Throwable, attachment: Unit): Unit =
+          cb(Left(exc))
+      })
+    }
 
   // Provides the syntax `Async { k => ... }` for asyncronous IO blocks.
   def Async[A](cb: (A => Unit) => Unit): IO[A] =
